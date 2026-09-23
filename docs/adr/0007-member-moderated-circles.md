@@ -1,0 +1,5 @@
+# Let circle members manage membership initially
+
+Initially, any Prayer Circle member may create a shareable invite link, approve name-based join requests, revoke unused links, remove other members, leave the circle, and change the circle's name, photo, description, or discoverability. Invite links are single-use and expire after two days; a user who joins through one joins directly after signing in or signing up. A user who finds a circle by name must request approval. All members have the same permissions, including the member who originally created the circle, and there is no ownership role. PrayerPal will not enforce a circle-size limit in the first version; an empty circle is archived and hidden from search. A future close-friends concept may control whose completion notifications a member receives without changing circle membership.
+
+This keeps small friend-and-family circles easy to manage while deferring a more complex distinction between belonging to a circle and receiving its notifications.
