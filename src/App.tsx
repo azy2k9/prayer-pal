@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { createApplication } from './runtime';
-import { DEMO_LOCATION } from './adapters/in-memory';
+import { DEMO_LOCATION, MANUAL_LOCATION_OPTIONS } from './adapters/in-memory';
 import type { AppSnapshot, HomeSnapshot, PrayerName } from './core/types';
 
 const COLORS = {
@@ -44,20 +44,76 @@ export default function App() {
     return <HomeScreen application={application} snapshot={snapshot} onChange={setSnapshot} />;
   }
 
-  return <WelcomeScreen />;
+  return <WelcomeScreen application={application} onAuthenticated={setSnapshot} />;
 }
 
-function WelcomeScreen() {
+function WelcomeScreen({
+  application,
+  onAuthenticated,
+}: {
+  application: ReturnType<typeof createApplication>;
+  onAuthenticated: (snapshot: AppSnapshot) => void;
+}) {
+  const [mode, setMode] = useState<'create' | 'sign-in'>('create');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function authenticate() {
+    try {
+      setError(null);
+      const snapshot = mode === 'create'
+        ? await application.createAccount({ email, password })
+        : await application.signIn({ email, password });
+      onAuthenticated(snapshot);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to access your account.');
+    }
+  }
+
   return (
     <Screen>
       <BrandMark />
       <Text style={styles.eyebrow}>Private encouragement for every prayer day</Text>
-      <Text style={styles.title}>PrayerPal is ready when you are.</Text>
-      <Text style={styles.body}>Sign-in is provided by the configured authentication boundary. This foundation keeps that provider replaceable while the shell is built.</Text>
+      <Text style={styles.title}>{mode === 'create' ? 'Make space for a steadier prayer day.' : 'Welcome back to PrayerPal.'}</Text>
+      <Text style={styles.body}>Your account keeps your Prayer Outcomes and Active Prayer Location available when you return. Prayer Circle membership is optional.</Text>
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Your worship, your circle</Text>
-        <Text style={styles.body}>Prayer Outcomes remain private. Prayer Circles share only positive Prayer Completion activity.</Text>
+        <Text style={styles.cardTitle}>{mode === 'create' ? 'Create your account' : 'Sign in to your account'}</Text>
+        <Text style={styles.label}>Email address</Text>
+        <TextInput
+          accessibilityLabel="Email address"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          onChangeText={setEmail}
+          style={styles.input}
+          value={email}
+        />
+        <Text style={styles.label}>Password</Text>
+        <TextInput
+          accessibilityLabel="Password"
+          autoCapitalize="none"
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+          value={password}
+        />
+        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        <Pressable accessibilityRole="button" onPress={() => void authenticate()} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>{mode === 'create' ? 'Create account' : 'Sign in'}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setError(null);
+            setMode(mode === 'create' ? 'sign-in' : 'create');
+          }}
+          style={styles.secondaryButton}
+        >
+          <Text style={styles.secondaryButtonText}>{mode === 'create' ? 'I already have an account' : 'Create a new account'}</Text>
+        </Pressable>
       </View>
+      <Text style={styles.footnote}>Prayer Outcomes remain private. Prayer Circles share only positive Prayer Completion activity.</Text>
       <StatusBar style="dark" />
     </Screen>
   );
@@ -73,14 +129,39 @@ function OnboardingScreen({
   onComplete: (snapshot: AppSnapshot) => void;
 }) {
   const [displayName, setDisplayName] = useState(snapshot.displayName);
+  const [location, setLocation] = useState(DEMO_LOCATION);
+  const [locationLabel, setLocationLabel] = useState(DEMO_LOCATION.label);
+  const [latitude, setLatitude] = useState(String(DEMO_LOCATION.latitude));
+  const [longitude, setLongitude] = useState(String(DEMO_LOCATION.longitude));
   const [error, setError] = useState<string | null>(null);
+
+  function updateManualLocation(next: { label?: string; latitude?: string; longitude?: string }) {
+    const nextLabel = next.label ?? locationLabel;
+    const nextLatitude = next.latitude ?? latitude;
+    const nextLongitude = next.longitude ?? longitude;
+    setLocationLabel(nextLabel);
+    setLatitude(nextLatitude);
+    setLongitude(nextLongitude);
+    setLocation({
+      label: nextLabel,
+      latitude: Number.parseFloat(nextLatitude),
+      longitude: Number.parseFloat(nextLongitude),
+    });
+  }
+
+  function chooseLocation(nextLocation: typeof DEMO_LOCATION) {
+    setLocation(nextLocation);
+    setLocationLabel(nextLocation.label);
+    setLatitude(String(nextLocation.latitude));
+    setLongitude(String(nextLocation.longitude));
+  }
 
   async function complete(notificationDecision: 'request' | 'declined') {
     try {
       setError(null);
       onComplete(await application.completeOnboarding({
         displayName,
-        location: DEMO_LOCATION,
+        location,
         notificationDecision,
       }));
     } catch (nextError) {
@@ -110,9 +191,53 @@ function OnboardingScreen({
           value={displayName}
         />
         <Text style={styles.label}>Active Prayer Location</Text>
-        <View accessible accessibilityLabel="Active Prayer Location: London, United Kingdom" style={styles.locationChoice}>
-          <Text style={styles.locationName}>{DEMO_LOCATION.label}</Text>
-          <Text style={styles.locationHint}>Used to calculate your Prayer Windows</Text>
+        <Text style={styles.locationHint}>Choose it manually. PrayerPal does not need continuous or background location access.</Text>
+        <View style={styles.locationOptions}>
+          {MANUAL_LOCATION_OPTIONS.map((option) => {
+            const selected = option.label === location.label;
+            return (
+              <Pressable
+                key={option.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Active Prayer Location: ${option.label}`}
+                onPress={() => chooseLocation(option)}
+                style={[styles.locationChoice, selected && styles.selectedLocationChoice]}
+              >
+                <Text style={styles.locationName}>{option.label}</Text>
+                <Text style={styles.locationHint}>{selected ? 'Selected' : 'Select this location'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.locationHint}>Or enter a location manually</Text>
+        <TextInput
+          accessibilityLabel="Manual location name"
+          onChangeText={(value) => updateManualLocation({ label: value })}
+          placeholder="Location name"
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+          value={locationLabel}
+        />
+        <View style={styles.coordinateRow}>
+          <TextInput
+            accessibilityLabel="Manual location latitude"
+            keyboardType="numbers-and-punctuation"
+            onChangeText={(value) => updateManualLocation({ latitude: value })}
+            placeholder="Latitude"
+            placeholderTextColor={COLORS.muted}
+            style={[styles.input, styles.coordinateInput]}
+            value={latitude}
+          />
+          <TextInput
+            accessibilityLabel="Manual location longitude"
+            keyboardType="numbers-and-punctuation"
+            onChangeText={(value) => updateManualLocation({ longitude: value })}
+            placeholder="Longitude"
+            placeholderTextColor={COLORS.muted}
+            style={[styles.input, styles.coordinateInput]}
+            value={longitude}
+          />
         </View>
         <Text style={styles.label}>Notifications</Text>
         <Text style={styles.locationHint}>You can continue if you decline. You can change this later.</Text>
@@ -191,6 +316,9 @@ function HomeScreen({
         <Text style={styles.locationHint}>{snapshot.location.label} · {snapshot.timingConfiguration.calculationMethod} · {snapshot.timingConfiguration.juristicSchool}</Text>
         <Text style={styles.locationHint}>Adjustments: none</Text>
       </View>
+      <Pressable accessibilityRole="button" onPress={() => void application.signOut().then(onChange)} style={styles.signOutButton}>
+        <Text style={styles.secondaryButtonText}>Sign out</Text>
+      </Pressable>
       <StatusBar style="dark" />
     </Screen>
   );
@@ -242,6 +370,10 @@ const styles = StyleSheet.create({
   label: { color: COLORS.ink, fontSize: 14, fontWeight: '700', marginTop: 6 },
   input: { borderColor: COLORS.border, borderRadius: 12, borderWidth: 1, color: COLORS.ink, fontSize: 16, minHeight: 52, paddingHorizontal: 14 },
   locationChoice: { backgroundColor: '#FFF1EB', borderRadius: 12, padding: 14 },
+  locationOptions: { gap: 8 },
+  selectedLocationChoice: { borderColor: COLORS.peach, borderWidth: 2 },
+  coordinateRow: { flexDirection: 'row', gap: 8 },
+  coordinateInput: { flex: 1 },
   locationName: { color: COLORS.navy, fontSize: 16, fontWeight: '700' },
   locationHint: { color: COLORS.muted, fontSize: 14, lineHeight: 20 },
   error: { color: '#B33F3F', fontSize: 14 },
@@ -270,4 +402,5 @@ const styles = StyleSheet.create({
   outcome: { color: COLORS.success, fontSize: 14, fontWeight: '800' },
   detailsCard: { backgroundColor: '#FFF1EB', borderRadius: 18, gap: 6, padding: 18 },
   detailsName: { color: COLORS.navy, fontSize: 15, fontWeight: '700' },
+  signOutButton: { alignItems: 'center', borderColor: COLORS.border, borderRadius: 14, borderWidth: 1, minHeight: 48, justifyContent: 'center' },
 });

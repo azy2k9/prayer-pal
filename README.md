@@ -14,7 +14,7 @@ The product combines a private personal prayer record with encouraging, non-comp
 
 ## Current status
 
-PrayerPal now has a runnable Expo/React Native foundation. Start the mobile shell with `npm install && npm start`, or run the application seam checks with `npm test` and `npm run typecheck`. The implementation roadmap is recorded in the [PrayerPal product specification](docs/prayerpal-product-spec.md), and the foundation runtime/provider choices are recorded in [ADR-0020](docs/adr/0020-foundation-runtime-and-provider-boundaries.md).
+PrayerPal now has a runnable Expo/React Native foundation with account access, persisted onboarding, and the personal prayer shell. Start the mobile shell with `npm install && npm start`, or run the application seam checks with `npm test` and `npm run typecheck`. The implementation roadmap is recorded in the [PrayerPal product specification](docs/prayerpal-product-spec.md), and the foundation runtime/provider choices are recorded in [ADR-0020](docs/adr/0020-foundation-runtime-and-provider-boundaries.md).
 
 The domain glossary is in [CONTEXT.md](CONTEXT.md), and architectural decisions are recorded in [docs/adr](docs/adr/). Agents should follow the repository guidance in [AGENTS.md](AGENTS.md).
 

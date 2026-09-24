@@ -8,6 +8,12 @@ import {
   InMemoryPrayerOutcomeStore,
   InMemoryUserProfileStore,
 } from '../src/adapters/in-memory';
+import {
+  InMemoryKeyValueStore,
+  PersistentAuthenticationGateway,
+  PersistentPrayerOutcomeStore,
+  PersistentUserProfileStore,
+} from '../src/adapters/persistent';
 import type {
   NotificationDeliveryOutcome,
   NotificationPermission,
@@ -53,7 +59,64 @@ function makeApplication({
   return { application, prayerTime, notifications };
 }
 
+function makePersistentApplication(storage: InMemoryKeyValueStore) {
+  const prayerTime = new ControlledPrayerTimeProvider();
+  const notifications = new InMemoryNotificationGateway('undetermined');
+  const application = new PrayerPalApplication({
+    clock: new FixedClock(new Date('2026-09-24T10:00:00.000Z')),
+    device: new FixedDeviceContext('UTC'),
+    authentication: new PersistentAuthenticationGateway(storage),
+    profiles: new PersistentUserProfileStore(storage),
+    outcomes: new PersistentPrayerOutcomeStore(storage),
+    prayerTime,
+    notifications,
+  });
+  return { application, prayerTime, notifications };
+}
+
 describe('PrayerPal application seam', () => {
+  it('creates an account and retains its completed onboarding across application restarts', async () => {
+    const storage = new InMemoryKeyValueStore();
+    const firstLaunch = makePersistentApplication(storage);
+
+    expect(await firstLaunch.application.start()).toEqual({ screen: 'welcome' });
+    expect(await firstLaunch.application.createAccount({
+      email: 'amina@example.com',
+      password: 'a-strong-password',
+    })).toMatchObject({ screen: 'onboarding' });
+
+    const home = await firstLaunch.application.completeOnboarding({
+      displayName: 'Amina',
+      location: { label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 },
+      notificationDecision: 'declined',
+    });
+    expect(home.displayName).toBe('Amina');
+    expect(home.location.label).toBe('Makkah, Saudi Arabia');
+
+    const restarted = makePersistentApplication(storage);
+    const restored = await restarted.application.start();
+
+    expect(restored).toMatchObject({
+      screen: 'home',
+      displayName: 'Amina',
+      location: { label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 },
+      notificationPermission: 'denied',
+    });
+  });
+
+  it('can sign in to an existing account after signing out', async () => {
+    const storage = new InMemoryKeyValueStore();
+    const firstLaunch = makePersistentApplication(storage);
+    await firstLaunch.application.createAccount({ email: 'amina@example.com', password: 'password' });
+    await firstLaunch.application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
+
+    expect(await firstLaunch.application.signOut()).toEqual({ screen: 'welcome' });
+    expect(await firstLaunch.application.signIn({ email: 'amina@example.com', password: 'password' })).toMatchObject({
+      screen: 'home',
+      displayName: 'Amina',
+    });
+  });
+
   it('runs the onboarding-to-prayer-completion smoke journey through replaceable boundaries', async () => {
     const { application, prayerTime, notifications } = makeApplication();
 
