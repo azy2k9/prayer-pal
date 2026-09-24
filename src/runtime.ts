@@ -10,6 +10,7 @@ import {
 } from './adapters/in-memory';
 import {
   PersistentPrayerOutcomeStore,
+  PersistentPrayerDayContextStore,
 } from './adapters/persistent';
 import { SupabaseUserProfileStore } from './adapters/supabase';
 import { SupabaseSocialAuthenticationGateway } from './adapters/supabase-social-auth';
@@ -45,6 +46,7 @@ export function createApplication(): PrayerPalApplication {
     authentication: new SupabaseSocialAuthenticationGateway(supabase),
     profiles: new SupabaseUserProfileStore(supabase),
     outcomes: new PersistentPrayerOutcomeStore(localStorage),
+    dayContexts: new PersistentPrayerDayContextStore(localStorage),
     prayerTime: new DemoPrayerTimeProvider(),
     notifications: new ExpoNotificationGateway(),
   });

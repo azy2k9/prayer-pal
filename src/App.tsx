@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  AppState,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -284,6 +285,20 @@ function HomeScreen({
   snapshot: HomeSnapshot;
   onChange: (snapshot: AppSnapshot) => void;
 }) {
+  useEffect(() => {
+    const refresh = () => {
+      void application.home().then(onChange);
+    };
+    const interval = setInterval(refresh, 60_000);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [application, onChange]);
+
   async function record(prayer: PrayerName, outcome: 'completed' | 'not-completed') {
     await application.recordPrayerOutcome({ prayerDate: snapshot.localDate, prayer, outcome });
     onChange(await application.home());
@@ -309,11 +324,15 @@ function HomeScreen({
       </View>
 
       {snapshot.prayers.map(({ prayer, window, outcome }) => (
-        <View key={prayer} style={[styles.prayerCard, snapshot.nextPrayer === prayer && styles.currentPrayerCard]}>
+        <View
+          key={prayer}
+          style={[styles.prayerCard, (snapshot.currentPrayer === prayer || snapshot.nextPrayer === prayer) && styles.currentPrayerCard]}
+        >
           <View style={styles.prayerInfo}>
             <Text style={styles.prayerName}>{displayPrayerName(prayer)}</Text>
-            <Text style={styles.prayerTime}>{formatTime(window.startsAt)} – {formatTime(window.endsAt)}</Text>
-            {snapshot.nextPrayer === prayer ? <Text style={styles.currentLabel}>CURRENT OR NEXT</Text> : null}
+            <Text style={styles.prayerTime}>{formatTime(window.startsAt, snapshot.windowTimeZone)} – {formatTime(window.endsAt, snapshot.windowTimeZone)}</Text>
+            {snapshot.currentPrayer === prayer ? <Text style={styles.currentLabel}>CURRENT PRAYER</Text> : null}
+            {snapshot.currentPrayer !== prayer && snapshot.nextPrayer === prayer ? <Text style={styles.nextLabel}>NEXT PRAYER</Text> : null}
           </View>
           {outcome ? (
             <Text style={styles.outcome}>{outcome === 'completed' ? 'Completed' : outcome === 'qada' ? 'Qada' : 'Not completed'}</Text>
@@ -334,7 +353,9 @@ function HomeScreen({
         <Text style={styles.cardTitle}>Your Timing Configuration</Text>
         <Text style={styles.detailsName}>{snapshot.timingConfiguration.name}</Text>
         <Text style={styles.locationHint}>{snapshot.location.label} · {snapshot.timingConfiguration.calculationMethod} · {snapshot.timingConfiguration.juristicSchool}</Text>
-        <Text style={styles.locationHint}>Adjustments: none</Text>
+        <Text style={styles.locationHint}>Adjustments: {formatAdjustments(snapshot.timingConfiguration.adjustments)}</Text>
+        <Text style={styles.locationHint}>Prayer day: {snapshot.prayerDayContext.prayerDate} · active device timezone {snapshot.windowTimeZone}</Text>
+        <Text style={styles.locationHint}>Observed day context: {snapshot.prayerDayContext.location.label} · timezone {snapshot.prayerDayContext.timeZone}</Text>
       </View>
       <Pressable accessibilityRole="button" onPress={() => void application.signOut().then(onChange)} style={styles.signOutButton}>
         <Text style={styles.secondaryButtonText}>Sign out</Text>
@@ -365,12 +386,18 @@ function CenteredMessage({ message }: { message: string }) {
   return <View style={styles.centered}><Text style={styles.body}>{message}</Text></View>;
 }
 
-function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+function formatTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZone }).format(new Date(iso));
 }
 
 function displayPrayerName(prayer: PrayerName): string {
   return prayer === 'Jumuah' ? "Jumu'ah" : prayer;
+}
+
+function formatAdjustments(adjustments: HomeSnapshot['timingConfiguration']['adjustments']): string {
+  const entries = Object.entries(adjustments);
+  if (entries.every(([, minutes]) => minutes === 0)) return 'none';
+  return entries.map(([prayer, minutes]) => `${displayPrayerName(prayer as PrayerName)} ${minutes >= 0 ? '+' : ''}${minutes} min`).join(', ');
 }
 
 const styles = StyleSheet.create({
@@ -414,6 +441,7 @@ const styles = StyleSheet.create({
   prayerName: { color: COLORS.navy, fontSize: 18, fontWeight: '800' },
   prayerTime: { color: COLORS.muted, fontSize: 14 },
   currentLabel: { color: COLORS.peach, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  nextLabel: { color: COLORS.success, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   actionRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   smallPrimaryButton: { alignItems: 'center', backgroundColor: COLORS.success, borderRadius: 10, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   smallPrimaryText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },

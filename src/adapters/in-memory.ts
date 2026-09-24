@@ -13,6 +13,8 @@ import type {
   PrayerName,
   PrayerOutcomeRecord,
   PrayerOutcomeStore,
+  PrayerDayContext,
+  PrayerDayContextStore,
   PrayerTimeProvider,
   PrayerWindow,
   PrayerWindowRequest,
@@ -35,10 +37,14 @@ export class SystemClock implements Clock {
 }
 
 export class FixedDeviceContext implements DeviceContext {
-  constructor(private readonly zone: string) {}
+  constructor(private zone: string) {}
 
   timeZone(): string {
     return this.zone;
+  }
+
+  setTimeZone(zone: string): void {
+    this.zone = zone;
   }
 }
 
@@ -111,6 +117,18 @@ export class InMemoryPrayerOutcomeStore implements PrayerOutcomeStore {
   }
 }
 
+export class InMemoryPrayerDayContextStore implements PrayerDayContextStore {
+  private readonly contexts = new Map<string, PrayerDayContext>();
+
+  async get(userId: string, prayerDate: string): Promise<PrayerDayContext | null> {
+    return this.contexts.get(`${userId}:${prayerDate}`) ?? null;
+  }
+
+  async save(userId: string, context: PrayerDayContext): Promise<void> {
+    this.contexts.set(`${userId}:${context.prayerDate}`, context);
+  }
+}
+
 const DEMO_PRAYER_TIMES: Readonly<Record<PrayerName, string>> = {
   Fajr: '05:00',
   Dhuhr: '12:30',
@@ -125,13 +143,21 @@ export class DemoPrayerTimeProvider implements PrayerTimeProvider {
     const prayers = [...prayersForDate(request.prayerDate)];
 
     return prayers.map((prayer, index) => {
+      const adjustment = request.timingConfiguration.adjustments[prayer] ?? 0;
       const startsAt = localDateTimeToUtc(request.prayerDate, DEMO_PRAYER_TIMES[prayer], request.timeZone);
+      startsAt.setTime(startsAt.getTime() + adjustment * 60_000);
       const nextPrayer = prayers[index + 1];
       const endsAt = nextPrayer
-        ? localDateTimeToUtc(request.prayerDate, DEMO_PRAYER_TIMES[nextPrayer], request.timeZone)
+        ? this.adjustedStart(request, nextPrayer)
         : new Date(startsAt.getTime() + 90 * 60 * 1000);
       return { prayer, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
     });
+  }
+
+  private adjustedStart(request: PrayerWindowRequest, prayer: PrayerName): Date {
+    const start = localDateTimeToUtc(request.prayerDate, DEMO_PRAYER_TIMES[prayer], request.timeZone);
+    start.setTime(start.getTime() + (request.timingConfiguration.adjustments[prayer] ?? 0) * 60_000);
+    return start;
   }
 }
 

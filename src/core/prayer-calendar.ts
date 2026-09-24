@@ -1,4 +1,4 @@
-import type { PrayerName, PrayerWindow } from './types';
+import type { PrayerName, PrayerWindow, PrayerWindowStatus } from './types';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -47,6 +47,19 @@ export function localDateTimeToUtc(prayerDate: string, time: string, timeZone: s
   return new Date(guess - (localAsUtc - guess));
 }
 
+export function prayerWindowStatus(window: PrayerWindow, now: Date): PrayerWindowStatus {
+  const startsAt = new Date(window.startsAt).getTime();
+  const endsAt = new Date(window.endsAt).getTime();
+  const instant = now.getTime();
+  if (instant >= startsAt && instant < endsAt) return 'current';
+  if (instant < startsAt) return 'upcoming';
+  return 'elapsed';
+}
+
+export function currentPrayer(prayers: PrayerWindow[], now: Date): PrayerName | null {
+  return prayers.find((prayer) => prayerWindowStatus(prayer, now) === 'current')?.prayer ?? null;
+}
+
 export function nextPrayer(prayers: PrayerWindow[], now: Date): PrayerName | null {
-  return prayers.find((prayer) => new Date(prayer.endsAt) > now)?.prayer ?? null;
+  return prayers.find((prayer) => prayerWindowStatus(prayer, now) === 'upcoming')?.prayer ?? null;
 }
