@@ -1,0 +1,146 @@
+export type PrayerName = 'Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha' | 'Jumuah';
+
+export type PrayerOutcome = 'completed' | 'not-completed' | 'qada';
+
+export type NotificationPermission = 'undetermined' | 'granted' | 'denied';
+
+export type NotificationDeliveryOutcome = 'delivered' | 'failed';
+
+export interface ActivePrayerLocation {
+  label: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface TimingConfiguration {
+  id: string;
+  name: string;
+  calculationMethod: string;
+  juristicSchool: 'Hanafi';
+  adjustments: Readonly<Record<PrayerName, number>>;
+  version: string;
+}
+
+export interface PrayerWindow {
+  prayer: PrayerName;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface PrayerWindowRequest {
+  prayerDate: string;
+  timeZone: string;
+  location: ActivePrayerLocation;
+  timingConfiguration: TimingConfiguration;
+}
+
+export interface PrayerOutcomeRecord {
+  userId: string;
+  prayerDate: string;
+  prayer: PrayerName;
+  outcome: PrayerOutcome;
+  recordedAt: string;
+  deviceTimeZone: string;
+  location: ActivePrayerLocation;
+  timingConfigurationVersion: string;
+}
+
+export interface UserProfile {
+  userId: string;
+  displayName: string;
+  activePrayerLocation: ActivePrayerLocation;
+  notificationPermission: NotificationPermission;
+  onboardingComplete: boolean;
+}
+
+export interface AuthenticatedUser {
+  userId: string;
+}
+
+export interface Clock {
+  now(): Date;
+}
+
+export interface DeviceContext {
+  timeZone(): string;
+}
+
+export interface AuthenticationGateway {
+  currentUser(): Promise<AuthenticatedUser | null>;
+}
+
+export interface UserProfileStore {
+  get(userId: string): Promise<UserProfile | null>;
+  save(profile: UserProfile): Promise<void>;
+}
+
+export interface PrayerOutcomeStore {
+  list(userId: string, prayerDate: string): Promise<PrayerOutcomeRecord[]>;
+  save(record: PrayerOutcomeRecord): Promise<void>;
+}
+
+export interface PrayerTimeProvider {
+  getPrayerWindows(request: PrayerWindowRequest): Promise<PrayerWindow[]>;
+}
+
+export interface PrayerCompletionNotification {
+  kind: 'prayer-completion';
+  body: 'A Circle Member recorded a Prayer Completion.';
+}
+
+export interface NotificationGateway {
+  permission(): Promise<NotificationPermission>;
+  requestPermission(): Promise<NotificationPermission>;
+  deliver(notification: PrayerCompletionNotification): Promise<NotificationDeliveryOutcome>;
+}
+
+export interface PrayerPalDependencies {
+  clock: Clock;
+  device: DeviceContext;
+  authentication: AuthenticationGateway;
+  profiles: UserProfileStore;
+  outcomes: PrayerOutcomeStore;
+  prayerTime: PrayerTimeProvider;
+  notifications: NotificationGateway;
+}
+
+export interface OnboardingSnapshot {
+  screen: 'onboarding';
+  displayName: string;
+  notificationPermission: NotificationPermission;
+}
+
+export interface WelcomeSnapshot {
+  screen: 'welcome';
+}
+
+export interface PrayerEntry {
+  prayer: PrayerName;
+  window: PrayerWindow;
+  outcome: PrayerOutcome | null;
+}
+
+export interface HomeSnapshot {
+  screen: 'home';
+  displayName: string;
+  localDate: string;
+  dayLabel: string;
+  location: ActivePrayerLocation;
+  timingConfiguration: TimingConfiguration;
+  notificationPermission: NotificationPermission;
+  prayers: PrayerEntry[];
+  nextPrayer: PrayerName | null;
+}
+
+export type AppSnapshot = WelcomeSnapshot | OnboardingSnapshot | HomeSnapshot;
+
+export type NotificationResult =
+  | { status: 'not-applicable' }
+  | { status: 'skipped-permission'; permission: NotificationPermission }
+  | { status: 'delivered' }
+  | { status: 'failed' };
+
+export interface RecordPrayerOutcomeResult {
+  record: PrayerOutcomeRecord;
+  notification: NotificationResult;
+}

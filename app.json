@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "PrayerPal",
+    "slug": "prayer-pal",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "prayerpal",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.prayerpal.app"
+    },
+    "android": {
+      "package": "com.prayerpal.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
