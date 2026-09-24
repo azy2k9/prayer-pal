@@ -12,6 +12,7 @@ import {
 import {
   InMemoryKeyValueStore,
   PersistentAuthenticationGateway,
+  PersistentPrayerDayContextStore,
   PersistentPrayerOutcomeStore,
   PersistentUserProfileStore,
 } from '../src/adapters/persistent';
@@ -81,8 +82,9 @@ function makeApplication({
   const outcomes = new InMemoryPrayerOutcomeStore();
   const dayContexts = new InMemoryPrayerDayContextStore();
   const device = new FixedDeviceContext('UTC');
+  const clock = new FixedClock(new Date('2026-09-24T10:00:00.000Z'));
   const application = new PrayerPalApplication({
-    clock: new FixedClock(new Date('2026-09-24T10:00:00.000Z')),
+    clock,
     device,
     authentication: new InMemoryAuthenticationGateway({ userId: 'user-1' }),
     profiles,
@@ -91,7 +93,7 @@ function makeApplication({
     prayerTime,
     notifications,
   });
-  return { application, prayerTime, notifications, outcomes, device, dayContexts };
+  return { application, prayerTime, notifications, outcomes, device, dayContexts, clock };
 }
 
 function makePersistentApplication(storage: InMemoryKeyValueStore) {
@@ -103,6 +105,7 @@ function makePersistentApplication(storage: InMemoryKeyValueStore) {
     authentication: new PersistentAuthenticationGateway(storage),
     profiles: new PersistentUserProfileStore(storage),
     outcomes: new PersistentPrayerOutcomeStore(storage),
+    dayContexts: new PersistentPrayerDayContextStore(storage),
     prayerTime,
     notifications,
   });
@@ -202,6 +205,7 @@ describe('PrayerPal application seam', () => {
       prayerDate: '2026-09-24',
       timeZone: 'UTC',
       location,
+      timingConfiguration: expect.objectContaining({ id: 'prayerpal-hanafi-mwl-v1', version: '1' }),
       timingConfigurationVersion: '1',
     });
     expect(prayerTime.requests[0]).toMatchObject({
@@ -293,6 +297,44 @@ describe('PrayerPal application seam', () => {
     });
   });
 
+  it('preserves the original Prayer Day Context when correcting a historical outcome', async () => {
+    const { application, outcomes, device } = makeApplication();
+    await application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
+
+    await application.recordPrayerOutcome({ prayerDate: '2026-09-24', prayer: 'Fajr', outcome: 'completed' });
+    device.setTimeZone('America/Los_Angeles');
+    await application.updateActivePrayerLocation({ label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 });
+
+    const result = await application.recordPrayerOutcome({ prayerDate: '2026-09-24', prayer: 'Fajr', outcome: 'qada' });
+
+    expect(result.record).toMatchObject({
+      prayerDate: '2026-09-24',
+      deviceTimeZone: 'UTC',
+      location,
+      timingConfiguration: { id: 'prayerpal-hanafi-mwl-v1', version: '1' },
+      outcome: 'qada',
+    });
+    expect((await outcomes.list('user-1', '2026-09-24'))).toHaveLength(1);
+  });
+
+  it('finalizes unrecorded prayers as not completed after local midnight', async () => {
+    const { application, outcomes, clock } = makeApplication();
+    await application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
+    await application.home();
+    await application.recordPrayerOutcome({ prayerDate: '2026-09-24', prayer: 'Fajr', outcome: 'completed' });
+
+    clock.setInstant(new Date('2026-09-25T00:01:00.000Z'));
+    await application.home();
+
+    expect(await outcomes.list('user-1', '2026-09-24')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prayer: 'Fajr', outcome: 'completed', deviceTimeZone: 'UTC', location }),
+      expect.objectContaining({ prayer: 'Dhuhr', outcome: 'not-completed', deviceTimeZone: 'UTC', location }),
+      expect.objectContaining({ prayer: 'Asr', outcome: 'not-completed' }),
+      expect.objectContaining({ prayer: 'Maghrib', outcome: 'not-completed' }),
+      expect.objectContaining({ prayer: 'Isha', outcome: 'not-completed' }),
+    ]));
+  });
+
   it('persists the labelled context when a prayer day is first observed, before any outcome is recorded', async () => {
     const { application, dayContexts } = makeApplication();
     await application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
@@ -303,6 +345,7 @@ describe('PrayerPal application seam', () => {
       prayerDate: '2026-09-24',
       timeZone: 'UTC',
       location,
+      timingConfiguration: expect.objectContaining({ id: 'prayerpal-hanafi-mwl-v1', version: '1' }),
       timingConfigurationVersion: '1',
     });
     expect((await application.home()).prayerDayContext.location).toEqual(location);

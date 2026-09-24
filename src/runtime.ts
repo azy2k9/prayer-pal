@@ -8,14 +8,9 @@ import {
   SystemClock,
   SystemDeviceContext,
 } from './adapters/in-memory';
-import {
-  PersistentPrayerOutcomeStore,
-  PersistentPrayerDayContextStore,
-} from './adapters/persistent';
-import { SupabaseUserProfileStore } from './adapters/supabase';
+import { SupabasePrayerDayContextStore, SupabasePrayerOutcomeStore, SupabaseUserProfileStore } from './adapters/supabase';
 import { SupabaseSocialAuthenticationGateway } from './adapters/supabase-social-auth';
 import { ExpoNotificationGateway } from './adapters/expo-notifications';
-import { SecureStoreKeyValueStore } from './adapters/secure-store';
 
 export function createApplication(): PrayerPalApplication {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -39,14 +34,13 @@ export function createApplication(): PrayerPalApplication {
       supabase.auth.stopAutoRefresh();
     }
   });
-  const localStorage = new SecureStoreKeyValueStore();
   return new PrayerPalApplication({
     clock: new SystemClock(),
     device: new SystemDeviceContext(),
     authentication: new SupabaseSocialAuthenticationGateway(supabase),
     profiles: new SupabaseUserProfileStore(supabase),
-    outcomes: new PersistentPrayerOutcomeStore(localStorage),
-    dayContexts: new PersistentPrayerDayContextStore(localStorage),
+    outcomes: new SupabasePrayerOutcomeStore(supabase),
+    dayContexts: new SupabasePrayerDayContextStore(supabase),
     prayerTime: new DemoPrayerTimeProvider(),
     notifications: new ExpoNotificationGateway(),
   });

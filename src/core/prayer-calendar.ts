@@ -14,6 +14,12 @@ export function dayLabelForDate(prayerDate: string): string {
   return WEEKDAY_NAMES[date.getUTCDay()];
 }
 
+export function dateOffset(prayerDate: string, days: number): string {
+  const date = new Date(`${prayerDate}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function localDateFor(instant: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
