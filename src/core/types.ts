@@ -4,6 +4,8 @@ export type PrayerOutcome = 'completed' | 'not-completed' | 'qada';
 
 export type NotificationPermission = 'undetermined' | 'granted' | 'denied';
 
+export type NotificationDecision = 'accepted' | 'declined';
+
 export type NotificationDeliveryOutcome = 'delivered' | 'failed';
 
 export interface ActivePrayerLocation {
@@ -50,6 +52,7 @@ export interface UserProfile {
   displayName: string;
   activePrayerLocation: ActivePrayerLocation;
   notificationPermission: NotificationPermission;
+  notificationDecision: NotificationDecision;
   onboardingComplete: boolean;
 }
 
@@ -67,6 +70,29 @@ export interface DeviceContext {
 
 export interface AuthenticationGateway {
   currentUser(): Promise<AuthenticatedUser | null>;
+}
+
+export interface AccountCredentials {
+  email: string;
+  password: string;
+}
+
+export type SocialAuthProvider = 'google' | 'apple';
+
+export interface AccountGateway extends AuthenticationGateway {
+  createAccount(credentials: AccountCredentials): Promise<AuthenticatedUser>;
+  signIn(credentials: AccountCredentials): Promise<AuthenticatedUser>;
+  signOut(): Promise<void>;
+}
+
+export interface SocialAccountGateway extends AccountGateway {
+  signInWithProvider(provider: SocialAuthProvider): Promise<AuthenticatedUser>;
+}
+
+export interface KeyValueStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
 }
 
 export interface UserProfileStore {

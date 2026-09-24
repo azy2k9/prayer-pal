@@ -14,7 +14,7 @@ The product combines a private personal prayer record with encouraging, non-comp
 
 ## Current status
 
-PrayerPal now has a runnable Expo/React Native foundation. Start the mobile shell with `npm install && npm start`, or run the application seam checks with `npm test` and `npm run typecheck`. The implementation roadmap is recorded in the [PrayerPal product specification](docs/prayerpal-product-spec.md), and the foundation runtime/provider choices are recorded in [ADR-0020](docs/adr/0020-foundation-runtime-and-provider-boundaries.md).
+PrayerPal now has a runnable Expo/React Native foundation with Supabase account access, Google and Apple OAuth, Postgres-backed onboarding profiles, and the personal prayer shell. Copy `.env.example` to `.env`, set the Supabase URL and publishable key, apply the migration in `supabase/migrations/`, enable the Google and Apple providers in Supabase, configure their provider credentials, and add `prayerpal://auth/callback` to Supabase Auth's redirect allow-list. Then start the mobile shell with `npm install && npm start`. Run the application seam checks with `npm test` and `npm run typecheck`. The implementation roadmap is recorded in the [PrayerPal product specification](docs/prayerpal-product-spec.md), and provider choices are recorded in [ADR-0020](docs/adr/0020-foundation-runtime-and-provider-boundaries.md).
 
 The domain glossary is in [CONTEXT.md](CONTEXT.md), and architectural decisions are recorded in [docs/adr](docs/adr/). Agents should follow the repository guidance in [AGENTS.md](AGENTS.md).
 

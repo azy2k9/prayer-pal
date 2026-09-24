@@ -1,8 +1,9 @@
 import { localDateTimeToUtc, prayersForDate } from '../core/prayer-calendar';
 import type {
   ActivePrayerLocation,
+  AccountCredentials,
+  AccountGateway,
   AuthenticatedUser,
-  AuthenticationGateway,
   Clock,
   DeviceContext,
   NotificationDeliveryOutcome,
@@ -47,11 +48,40 @@ export class SystemDeviceContext implements DeviceContext {
   }
 }
 
-export class InMemoryAuthenticationGateway implements AuthenticationGateway {
-  constructor(private readonly user: AuthenticatedUser | null = { userId: 'local-demo-user' }) {}
+export class InMemoryAuthenticationGateway implements AccountGateway {
+  private readonly accounts = new Map<string, AccountCredentials & { userId: string }>();
+  private current: AuthenticatedUser | null;
+
+  constructor(user: AuthenticatedUser | null = { userId: 'local-demo-user' }) {
+    this.current = user;
+  }
 
   async currentUser(): Promise<AuthenticatedUser | null> {
-    return this.user;
+    return this.current;
+  }
+
+  async createAccount(credentials: AccountCredentials): Promise<AuthenticatedUser> {
+    const email = credentials.email.trim().toLowerCase();
+    if (this.accounts.has(email)) {
+      throw new Error('An account with this email already exists.');
+    }
+    const user = { userId: `account-${this.accounts.size + 1}` };
+    this.accounts.set(email, { ...credentials, email, userId: user.userId });
+    this.current = user;
+    return user;
+  }
+
+  async signIn(credentials: AccountCredentials): Promise<AuthenticatedUser> {
+    const account = this.accounts.get(credentials.email.trim().toLowerCase());
+    if (!account || account.password !== credentials.password) {
+      throw new Error('The email address or password is incorrect.');
+    }
+    this.current = { userId: account.userId };
+    return this.current;
+  }
+
+  async signOut(): Promise<void> {
+    this.current = null;
   }
 }
 
@@ -139,3 +169,9 @@ export const DEMO_LOCATION: ActivePrayerLocation = {
   latitude: 51.5072,
   longitude: -0.1276,
 };
+
+export const MANUAL_LOCATION_OPTIONS: readonly ActivePrayerLocation[] = [
+  DEMO_LOCATION,
+  { label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 },
+  { label: 'New York, United States', latitude: 40.7128, longitude: -74.006 },
+];

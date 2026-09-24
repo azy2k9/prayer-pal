@@ -6,12 +6,16 @@ import {
 } from './prayer-calendar';
 import type {
   AppSnapshot,
+  AccountCredentials,
+  AccountGateway,
   HomeSnapshot,
   OnboardingSnapshot,
   PrayerName,
   PrayerOutcome,
   PrayerPalDependencies,
   RecordPrayerOutcomeResult,
+  SocialAccountGateway,
+  SocialAuthProvider,
   TimingConfiguration,
   ActivePrayerLocation,
 } from './types';
@@ -49,6 +53,30 @@ export class PrayerPalApplication {
     return this.homeSnapshot(user.userId);
   }
 
+  async createAccount(credentials: AccountCredentials): Promise<AppSnapshot> {
+    const account = this.accountGateway();
+    await account.createAccount(this.validatedCredentials(credentials));
+    return this.start();
+  }
+
+  async signIn(credentials: AccountCredentials): Promise<AppSnapshot> {
+    const account = this.accountGateway();
+    await account.signIn(this.validatedCredentials(credentials));
+    return this.start();
+  }
+
+  async signInWithProvider(provider: SocialAuthProvider): Promise<AppSnapshot> {
+    const account = this.socialAccountGateway();
+    await account.signInWithProvider(provider);
+    return this.start();
+  }
+
+  async signOut(): Promise<AppSnapshot> {
+    const account = this.accountGateway();
+    await account.signOut();
+    return this.start();
+  }
+
   async completeOnboarding(input: {
     displayName: string;
     location: ActivePrayerLocation;
@@ -62,6 +90,15 @@ export class PrayerPalApplication {
     if (!input.location.label.trim()) {
       throw new Error('An Active Prayer Location is required to complete onboarding.');
     }
+    if (!Number.isFinite(input.location.latitude) || input.location.latitude < -90 || input.location.latitude > 90) {
+      throw new Error('An Active Prayer Location must have a valid latitude.');
+    }
+    if (!Number.isFinite(input.location.longitude) || input.location.longitude < -180 || input.location.longitude > 180) {
+      throw new Error('An Active Prayer Location must have a valid longitude.');
+    }
+    if (input.notificationDecision !== 'request' && input.notificationDecision !== 'declined') {
+      throw new Error('A notification-permission decision is required to complete onboarding.');
+    }
 
     const notificationPermission = input.notificationDecision === 'request'
       ? await this.dependencies.notifications.requestPermission()
@@ -70,8 +107,9 @@ export class PrayerPalApplication {
     await this.dependencies.profiles.save({
       userId: user.userId,
       displayName,
-      activePrayerLocation: input.location,
+      activePrayerLocation: { ...input.location, label: input.location.label.trim() },
       notificationPermission,
+      notificationDecision: input.notificationDecision === 'request' ? 'accepted' : 'declined',
       onboardingComplete: true,
     });
 
@@ -164,5 +202,36 @@ export class PrayerPalApplication {
 
   private timeZone(): string {
     return this.dependencies.device.timeZone();
+  }
+
+  private accountGateway(): AccountGateway {
+    const authentication = this.dependencies.authentication as Partial<AccountGateway>;
+    if (
+      typeof authentication.createAccount !== 'function'
+      || typeof authentication.signIn !== 'function'
+      || typeof authentication.signOut !== 'function'
+    ) {
+      throw new Error('Account access is not configured.');
+    }
+    return authentication as AccountGateway;
+  }
+
+  private socialAccountGateway(): SocialAccountGateway {
+    const authentication = this.dependencies.authentication as Partial<SocialAccountGateway>;
+    if (typeof authentication.signInWithProvider !== 'function') {
+      throw new Error('Social account access is not configured.');
+    }
+    return authentication as SocialAccountGateway;
+  }
+
+  private validatedCredentials(credentials: AccountCredentials): AccountCredentials {
+    const email = credentials.email.trim().toLowerCase();
+    if (!email) {
+      throw new Error('An email address is required.');
+    }
+    if (!credentials.password) {
+      throw new Error('A password is required.');
+    }
+    return { email, password: credentials.password };
   }
 }
