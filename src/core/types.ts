@@ -46,6 +46,7 @@ export interface PrayerOutcomeRecord {
   recordedAt: string;
   deviceTimeZone: string;
   location: ActivePrayerLocation;
+  timingConfiguration: TimingConfiguration;
   timingConfigurationVersion: string;
 }
 
@@ -159,6 +160,7 @@ export interface PrayerDayContext {
   prayerDate: string;
   timeZone: string;
   location: ActivePrayerLocation;
+  timingConfiguration: TimingConfiguration;
   timingConfigurationVersion: string;
 }
 

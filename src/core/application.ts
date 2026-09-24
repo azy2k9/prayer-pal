@@ -1,6 +1,7 @@
 import {
   currentPrayer,
   dayLabelForDate,
+  dateOffset,
   localDateFor,
   nextPrayer,
   prayerWindowStatus,
@@ -140,24 +141,28 @@ export class PrayerPalApplication {
       throw new Error('Jumuah cannot be recorded as Qada.');
     }
 
+    const existingContext = await this.dependencies.dayContexts?.get(user.userId, input.prayerDate);
+    const context = existingContext ?? {
+      prayerDate: input.prayerDate,
+      timeZone: this.timeZone(),
+      location: profile.activePrayerLocation,
+      timingConfiguration: INITIAL_TIMING_CONFIGURATION,
+      timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
+    };
+    if (!existingContext && this.dependencies.dayContexts) {
+      await this.dependencies.dayContexts.save(user.userId, context);
+    }
     const record = {
       userId: user.userId,
       prayerDate: input.prayerDate,
       prayer: input.prayer,
       outcome: input.outcome,
       recordedAt: this.dependencies.clock.now().toISOString(),
-      deviceTimeZone: this.timeZone(),
-      location: profile.activePrayerLocation,
-      timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
+      deviceTimeZone: context.timeZone,
+      location: context.location,
+      timingConfiguration: context.timingConfiguration,
+      timingConfigurationVersion: context.timingConfigurationVersion,
     };
-    if (this.dependencies.dayContexts && !(await this.dependencies.dayContexts.get(user.userId, input.prayerDate))) {
-      await this.dependencies.dayContexts.save(user.userId, {
-        prayerDate: input.prayerDate,
-        timeZone: record.deviceTimeZone,
-        location: record.location,
-        timingConfigurationVersion: record.timingConfigurationVersion,
-      });
-    }
     await this.dependencies.outcomes.save(record);
     return { record, notification: { status: 'not-applicable' } };
   }
@@ -167,6 +172,7 @@ export class PrayerPalApplication {
     const now = this.dependencies.clock.now();
     const deviceTimeZone = this.timeZone();
     const localDate = localDateFor(now, deviceTimeZone);
+    await this.finalizePreviousPrayerDay(userId, localDate);
     const outcomes = await this.dependencies.outcomes.list(userId, localDate);
     const storedContext = await this.dependencies.dayContexts?.get(userId, localDate);
     let observedContext = storedContext
@@ -174,6 +180,7 @@ export class PrayerPalApplication {
         prayerDate: localDate,
         timeZone: outcomes[0].deviceTimeZone,
         location: outcomes[0].location,
+        timingConfiguration: outcomes[0].timingConfiguration,
         timingConfigurationVersion: outcomes[0].timingConfigurationVersion,
       });
     if (observedContext && !storedContext && this.dependencies.dayContexts) {
@@ -184,6 +191,7 @@ export class PrayerPalApplication {
         prayerDate: localDate,
         timeZone: deviceTimeZone,
         location: profile.activePrayerLocation,
+        timingConfiguration: INITIAL_TIMING_CONFIGURATION,
         timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
       };
       await this.dependencies.dayContexts.save(userId, observedContext);
@@ -212,7 +220,8 @@ export class PrayerPalApplication {
         prayerDate: localDate,
         timeZone: observedContext?.timeZone ?? deviceTimeZone,
         location: labelledLocation,
-        timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
+        timingConfiguration: observedContext?.timingConfiguration ?? INITIAL_TIMING_CONFIGURATION,
+        timingConfigurationVersion: observedContext?.timingConfigurationVersion ?? INITIAL_TIMING_CONFIGURATION.version,
       },
       notificationPermission: profile.notificationPermission,
       prayers: windows.map((window) => {
@@ -227,6 +236,29 @@ export class PrayerPalApplication {
       currentPrayer: currentPrayer(windows, now),
       nextPrayer: next,
     };
+  }
+
+  private async finalizePreviousPrayerDay(userId: string, localDate: string): Promise<void> {
+    if (!this.dependencies.dayContexts) return;
+    const prayerDate = dateOffset(localDate, -1);
+    const context = await this.dependencies.dayContexts.get(userId, prayerDate);
+    if (!context) return;
+    const existing = await this.dependencies.outcomes.list(userId, prayerDate);
+    const recordedPrayers = new Set(existing.map((record) => record.prayer));
+    for (const prayer of prayersForDate(prayerDate)) {
+      if (recordedPrayers.has(prayer)) continue;
+      await this.dependencies.outcomes.save({
+        userId,
+        prayerDate,
+        prayer,
+        outcome: 'not-completed',
+        recordedAt: this.dependencies.clock.now().toISOString(),
+        deviceTimeZone: context.timeZone,
+        location: context.location,
+        timingConfiguration: context.timingConfiguration,
+        timingConfigurationVersion: context.timingConfigurationVersion,
+      });
+    }
   }
 
   private onboardingSnapshot(displayName: string, notificationPermission: OnboardingSnapshot['notificationPermission']): OnboardingSnapshot {

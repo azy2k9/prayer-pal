@@ -23,10 +23,14 @@ import type {
 } from '../core/types';
 
 export class FixedClock implements Clock {
-  constructor(private readonly instant: Date) {}
+  constructor(private instant: Date) {}
 
   now(): Date {
     return new Date(this.instant);
+  }
+
+  setInstant(instant: Date): void {
+    this.instant = instant;
   }
 }
 
