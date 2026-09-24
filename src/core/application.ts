@@ -1,7 +1,9 @@
 import {
+  currentPrayer,
   dayLabelForDate,
   localDateFor,
   nextPrayer,
+  prayerWindowStatus,
   prayersForDate,
 } from './prayer-calendar';
 import type {
@@ -87,15 +89,7 @@ export class PrayerPalApplication {
     if (!displayName) {
       throw new Error('A display name is required to complete onboarding.');
     }
-    if (!input.location.label.trim()) {
-      throw new Error('An Active Prayer Location is required to complete onboarding.');
-    }
-    if (!Number.isFinite(input.location.latitude) || input.location.latitude < -90 || input.location.latitude > 90) {
-      throw new Error('An Active Prayer Location must have a valid latitude.');
-    }
-    if (!Number.isFinite(input.location.longitude) || input.location.longitude < -180 || input.location.longitude > 180) {
-      throw new Error('An Active Prayer Location must have a valid longitude.');
-    }
+    this.validateLocation(input.location);
     if (input.notificationDecision !== 'request' && input.notificationDecision !== 'declined') {
       throw new Error('A notification-permission decision is required to complete onboarding.');
     }
@@ -118,6 +112,17 @@ export class PrayerPalApplication {
 
   async home(): Promise<HomeSnapshot> {
     const user = await this.requireUser();
+    return this.homeSnapshot(user.userId);
+  }
+
+  async updateActivePrayerLocation(location: ActivePrayerLocation): Promise<HomeSnapshot> {
+    const user = await this.requireUser();
+    const profile = await this.requireProfile(user.userId);
+    this.validateLocation(location);
+    await this.dependencies.profiles.save({
+      ...profile,
+      activePrayerLocation: { ...location, label: location.label.trim() },
+    });
     return this.homeSnapshot(user.userId);
   }
 
@@ -145,6 +150,14 @@ export class PrayerPalApplication {
       location: profile.activePrayerLocation,
       timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
     };
+    if (this.dependencies.dayContexts && !(await this.dependencies.dayContexts.get(user.userId, input.prayerDate))) {
+      await this.dependencies.dayContexts.save(user.userId, {
+        prayerDate: input.prayerDate,
+        timeZone: record.deviceTimeZone,
+        location: record.location,
+        timingConfigurationVersion: record.timingConfigurationVersion,
+      });
+    }
     await this.dependencies.outcomes.save(record);
     return { record, notification: { status: 'not-applicable' } };
   }
@@ -152,31 +165,67 @@ export class PrayerPalApplication {
   private async homeSnapshot(userId: string): Promise<HomeSnapshot> {
     const profile = await this.requireProfile(userId);
     const now = this.dependencies.clock.now();
-    const timeZone = this.timeZone();
-    const localDate = localDateFor(now, timeZone);
+    const deviceTimeZone = this.timeZone();
+    const localDate = localDateFor(now, deviceTimeZone);
+    const outcomes = await this.dependencies.outcomes.list(userId, localDate);
+    const storedContext = await this.dependencies.dayContexts?.get(userId, localDate);
+    let observedContext = storedContext
+      ?? (outcomes[0] && {
+        prayerDate: localDate,
+        timeZone: outcomes[0].deviceTimeZone,
+        location: outcomes[0].location,
+        timingConfigurationVersion: outcomes[0].timingConfigurationVersion,
+      });
+    if (observedContext && !storedContext && this.dependencies.dayContexts) {
+      await this.dependencies.dayContexts.save(userId, observedContext);
+    }
+    if (!observedContext && this.dependencies.dayContexts) {
+      observedContext = {
+        prayerDate: localDate,
+        timeZone: deviceTimeZone,
+        location: profile.activePrayerLocation,
+        timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
+      };
+      await this.dependencies.dayContexts.save(userId, observedContext);
+    }
+    const timeZone = deviceTimeZone;
+    const location = profile.activePrayerLocation;
+    const labelledLocation = observedContext?.location ?? location;
     const windows = await this.dependencies.prayerTime.getPrayerWindows({
       prayerDate: localDate,
       timeZone,
-      location: profile.activePrayerLocation,
+      location,
       timingConfiguration: INITIAL_TIMING_CONFIGURATION,
     });
-    const outcomes = await this.dependencies.outcomes.list(userId, localDate);
     const outcomeByPrayer = new Map(outcomes.map((outcome) => [outcome.prayer, outcome.outcome]));
 
+    const next = nextPrayer(windows, now);
     return {
       screen: 'home',
       displayName: profile.displayName,
       localDate,
       dayLabel: dayLabelForDate(localDate),
-      location: profile.activePrayerLocation,
+      location,
       timingConfiguration: INITIAL_TIMING_CONFIGURATION,
+      windowTimeZone: deviceTimeZone,
+      prayerDayContext: {
+        prayerDate: localDate,
+        timeZone: observedContext?.timeZone ?? deviceTimeZone,
+        location: labelledLocation,
+        timingConfigurationVersion: INITIAL_TIMING_CONFIGURATION.version,
+      },
       notificationPermission: profile.notificationPermission,
-      prayers: windows.map((window) => ({
-        prayer: window.prayer,
-        window,
-        outcome: outcomeByPrayer.get(window.prayer) ?? null,
-      })),
-      nextPrayer: nextPrayer(windows, now),
+      prayers: windows.map((window) => {
+        const status = prayerWindowStatus(window, now);
+        return {
+          prayer: window.prayer,
+          window,
+          outcome: outcomeByPrayer.get(window.prayer) ?? null,
+          status: status === 'upcoming' && window.prayer === next ? 'next' : status,
+        };
+      }),
+      currentPrayer: currentPrayer(windows, now),
+      nextPrayer: next,
     };
   }
 
@@ -202,6 +251,18 @@ export class PrayerPalApplication {
 
   private timeZone(): string {
     return this.dependencies.device.timeZone();
+  }
+
+  private validateLocation(location: ActivePrayerLocation): void {
+    if (!location.label.trim()) {
+      throw new Error('An Active Prayer Location is required.');
+    }
+    if (!Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90) {
+      throw new Error('An Active Prayer Location must have a valid latitude.');
+    }
+    if (!Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180) {
+      throw new Error('An Active Prayer Location must have a valid longitude.');
+    }
   }
 
   private accountGateway(): AccountGateway {

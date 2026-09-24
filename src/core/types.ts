@@ -29,6 +29,8 @@ export interface PrayerWindow {
   endsAt: string;
 }
 
+export type PrayerWindowStatus = 'elapsed' | 'current' | 'next' | 'upcoming';
+
 export interface PrayerWindowRequest {
   prayerDate: string;
   timeZone: string;
@@ -105,6 +107,11 @@ export interface PrayerOutcomeStore {
   save(record: PrayerOutcomeRecord): Promise<void>;
 }
 
+export interface PrayerDayContextStore {
+  get(userId: string, prayerDate: string): Promise<PrayerDayContext | null>;
+  save(userId: string, context: PrayerDayContext): Promise<void>;
+}
+
 export interface PrayerTimeProvider {
   getPrayerWindows(request: PrayerWindowRequest): Promise<PrayerWindow[]>;
 }
@@ -126,6 +133,7 @@ export interface PrayerPalDependencies {
   authentication: AuthenticationGateway;
   profiles: UserProfileStore;
   outcomes: PrayerOutcomeStore;
+  dayContexts?: PrayerDayContextStore;
   prayerTime: PrayerTimeProvider;
   notifications: NotificationGateway;
 }
@@ -144,6 +152,14 @@ export interface PrayerEntry {
   prayer: PrayerName;
   window: PrayerWindow;
   outcome: PrayerOutcome | null;
+  status: PrayerWindowStatus;
+}
+
+export interface PrayerDayContext {
+  prayerDate: string;
+  timeZone: string;
+  location: ActivePrayerLocation;
+  timingConfigurationVersion: string;
 }
 
 export interface HomeSnapshot {
@@ -153,8 +169,11 @@ export interface HomeSnapshot {
   dayLabel: string;
   location: ActivePrayerLocation;
   timingConfiguration: TimingConfiguration;
+  windowTimeZone: string;
+  prayerDayContext: PrayerDayContext;
   notificationPermission: NotificationPermission;
   prayers: PrayerEntry[];
+  currentPrayer: PrayerName | null;
   nextPrayer: PrayerName | null;
 }
 

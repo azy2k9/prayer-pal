@@ -5,6 +5,8 @@ import type {
   KeyValueStore,
   PrayerOutcomeRecord,
   PrayerOutcomeStore,
+  PrayerDayContext,
+  PrayerDayContextStore,
   UserProfile,
   UserProfileStore,
 } from '../core/types';
@@ -13,6 +15,7 @@ const ACCOUNTS_KEY = 'prayerpal.accounts.v1';
 const SESSION_KEY = 'prayerpal.session.v1';
 const PROFILE_KEY_PREFIX = 'prayerpal.profile.v1:';
 const OUTCOMES_KEY_PREFIX = 'prayerpal.outcomes.v1:';
+const DAY_CONTEXT_KEY_PREFIX = 'prayerpal.day-context.v1:';
 
 type StoredAccount = AccountCredentials & { userId: string };
 
@@ -112,5 +115,18 @@ export class PersistentPrayerOutcomeStore implements PrayerOutcomeStore {
   private async records(userId: string): Promise<PrayerOutcomeRecord[]> {
     const serialized = await this.storage.get(`${OUTCOMES_KEY_PREFIX}${userId}`);
     return serialized ? JSON.parse(serialized) as PrayerOutcomeRecord[] : [];
+  }
+}
+
+export class PersistentPrayerDayContextStore implements PrayerDayContextStore {
+  constructor(private readonly storage: KeyValueStore) {}
+
+  async get(userId: string, prayerDate: string): Promise<PrayerDayContext | null> {
+    const serialized = await this.storage.get(`${DAY_CONTEXT_KEY_PREFIX}${userId}:${prayerDate}`);
+    return serialized ? JSON.parse(serialized) as PrayerDayContext : null;
+  }
+
+  async save(userId: string, context: PrayerDayContext): Promise<void> {
+    await this.storage.set(`${DAY_CONTEXT_KEY_PREFIX}${userId}:${context.prayerDate}`, JSON.stringify(context));
   }
 }

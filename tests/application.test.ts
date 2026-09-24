@@ -5,6 +5,7 @@ import {
   FixedDeviceContext,
   InMemoryAuthenticationGateway,
   InMemoryNotificationGateway,
+  InMemoryPrayerDayContextStore,
   InMemoryPrayerOutcomeStore,
   InMemoryUserProfileStore,
 } from '../src/adapters/in-memory';
@@ -76,16 +77,21 @@ function makeApplication({
 } = {}) {
   const prayerTime = new ControlledPrayerTimeProvider();
   const notifications = new InMemoryNotificationGateway(notificationPermission, deliveryOutcome);
+  const profiles = new InMemoryUserProfileStore();
+  const outcomes = new InMemoryPrayerOutcomeStore();
+  const dayContexts = new InMemoryPrayerDayContextStore();
+  const device = new FixedDeviceContext('UTC');
   const application = new PrayerPalApplication({
     clock: new FixedClock(new Date('2026-09-24T10:00:00.000Z')),
-    device: new FixedDeviceContext('UTC'),
+    device,
     authentication: new InMemoryAuthenticationGateway({ userId: 'user-1' }),
-    profiles: new InMemoryUserProfileStore(),
-    outcomes: new InMemoryPrayerOutcomeStore(),
+    profiles,
+    outcomes,
+    dayContexts,
     prayerTime,
     notifications,
   });
-  return { application, prayerTime, notifications };
+  return { application, prayerTime, notifications, outcomes, device, dayContexts };
 }
 
 function makePersistentApplication(storage: InMemoryKeyValueStore) {
@@ -183,6 +189,21 @@ describe('PrayerPal application seam', () => {
     expect(home.screen).toBe('home');
     expect(home.localDate).toBe('2026-09-24');
     expect(home.prayers.map(({ prayer }) => prayer)).toEqual(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']);
+    expect(home.currentPrayer).toBe('Fajr');
+    expect(home.nextPrayer).toBe('Dhuhr');
+    expect(home.prayers.map(({ prayer, status }) => [prayer, status])).toEqual([
+      ['Fajr', 'current'],
+      ['Dhuhr', 'next'],
+      ['Asr', 'upcoming'],
+      ['Maghrib', 'upcoming'],
+      ['Isha', 'upcoming'],
+    ]);
+    expect(home.prayerDayContext).toEqual({
+      prayerDate: '2026-09-24',
+      timeZone: 'UTC',
+      location,
+      timingConfigurationVersion: '1',
+    });
     expect(prayerTime.requests[0]).toMatchObject({
       prayerDate: '2026-09-24',
       timeZone: 'UTC',
@@ -241,5 +262,49 @@ describe('PrayerPal application seam', () => {
       prayer: 'Dhuhr',
       outcome: 'completed',
     })).rejects.toThrow('Dhuhr is not part of the tracked prayers');
+  });
+
+  it('keeps an observed prayer outcome labelled with the location and timezone in effect when it was recorded', async () => {
+    const { application, outcomes, device, prayerTime } = makeApplication();
+    await application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
+
+    await application.recordPrayerOutcome({ prayerDate: '2026-09-24', prayer: 'Fajr', outcome: 'completed' });
+    await application.updateActivePrayerLocation({ label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 });
+    device.setTimeZone('America/Los_Angeles');
+
+    const observedHome = await application.home();
+    expect(observedHome.location).toEqual({ label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 });
+    expect(prayerTime.requests.at(-1)).toMatchObject({
+      location: { label: 'Makkah, Saudi Arabia' },
+      timeZone: 'America/Los_Angeles',
+    });
+    expect(observedHome.prayerDayContext).toMatchObject({
+      prayerDate: '2026-09-24',
+      timeZone: 'UTC',
+      location,
+    });
+
+    const [record] = await outcomes.list('user-1', '2026-09-24');
+    expect(record).toMatchObject({
+      prayerDate: '2026-09-24',
+      deviceTimeZone: 'UTC',
+      location,
+      timingConfigurationVersion: '1',
+    });
+  });
+
+  it('persists the labelled context when a prayer day is first observed, before any outcome is recorded', async () => {
+    const { application, dayContexts } = makeApplication();
+    await application.completeOnboarding({ displayName: 'Amina', location, notificationDecision: 'declined' });
+    await application.home();
+    await application.updateActivePrayerLocation({ label: 'Makkah, Saudi Arabia', latitude: 21.4225, longitude: 39.8262 });
+
+    expect(await dayContexts.get('user-1', '2026-09-24')).toEqual({
+      prayerDate: '2026-09-24',
+      timeZone: 'UTC',
+      location,
+      timingConfigurationVersion: '1',
+    });
+    expect((await application.home()).prayerDayContext.location).toEqual(location);
   });
 });
