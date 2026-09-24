@@ -11,7 +11,8 @@ import {
 import {
   PersistentPrayerOutcomeStore,
 } from './adapters/persistent';
-import { SupabaseAuthenticationGateway, SupabaseUserProfileStore } from './adapters/supabase';
+import { SupabaseUserProfileStore } from './adapters/supabase';
+import { SupabaseSocialAuthenticationGateway } from './adapters/supabase-social-auth';
 import { ExpoNotificationGateway } from './adapters/expo-notifications';
 import { SecureStoreKeyValueStore } from './adapters/secure-store';
 
@@ -41,7 +42,7 @@ export function createApplication(): PrayerPalApplication {
   return new PrayerPalApplication({
     clock: new SystemClock(),
     device: new SystemDeviceContext(),
-    authentication: new SupabaseAuthenticationGateway(supabase),
+    authentication: new SupabaseSocialAuthenticationGateway(supabase),
     profiles: new SupabaseUserProfileStore(supabase),
     outcomes: new PersistentPrayerOutcomeStore(localStorage),
     prayerTime: new DemoPrayerTimeProvider(),

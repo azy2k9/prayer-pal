@@ -11,7 +11,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { createApplication } from './runtime';
 import { DEMO_LOCATION, MANUAL_LOCATION_OPTIONS } from './adapters/in-memory';
-import type { AppSnapshot, HomeSnapshot, PrayerName } from './core/types';
+import type { AppSnapshot, HomeSnapshot, PrayerName, SocialAuthProvider } from './core/types';
 
 const COLORS = {
   navy: '#172A46',
@@ -75,6 +75,15 @@ function WelcomeScreen({
     }
   }
 
+  async function authenticateWithProvider(provider: SocialAuthProvider) {
+    try {
+      setError(null);
+      onAuthenticated(await application.signInWithProvider(provider));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to access your account.');
+    }
+  }
+
   return (
     <Screen>
       <BrandMark />
@@ -115,6 +124,13 @@ function WelcomeScreen({
           style={styles.secondaryButton}
         >
           <Text style={styles.secondaryButtonText}>{mode === 'create' ? 'I already have an account' : 'Create a new account'}</Text>
+        </Pressable>
+        <Text style={styles.orLabel}>or continue with</Text>
+        <Pressable accessibilityRole="button" onPress={() => void authenticateWithProvider('google')} style={styles.socialButton}>
+          <Text style={styles.secondaryButtonText}>Continue with Google</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void authenticateWithProvider('apple')} style={styles.socialButton}>
+          <Text style={styles.secondaryButtonText}>Continue with Apple</Text>
         </Pressable>
       </View>
       <Text style={styles.footnote}>Prayer Outcomes remain private. Prayer Circles share only positive Prayer Completion activity.</Text>
@@ -407,4 +423,6 @@ const styles = StyleSheet.create({
   detailsCard: { backgroundColor: '#FFF1EB', borderRadius: 18, gap: 6, padding: 18 },
   detailsName: { color: COLORS.navy, fontSize: 15, fontWeight: '700' },
   signOutButton: { alignItems: 'center', borderColor: COLORS.border, borderRadius: 14, borderWidth: 1, minHeight: 48, justifyContent: 'center' },
+  orLabel: { color: COLORS.muted, fontSize: 13, textAlign: 'center' },
+  socialButton: { alignItems: 'center', backgroundColor: COLORS.white, borderColor: COLORS.border, borderRadius: 14, borderWidth: 1, minHeight: 48, justifyContent: 'center' },
 });

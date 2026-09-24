@@ -15,10 +15,12 @@ import {
   PersistentUserProfileStore,
 } from '../src/adapters/persistent';
 import type {
+  AuthenticatedUser,
   NotificationDeliveryOutcome,
   NotificationPermission,
   PrayerTimeProvider,
   PrayerWindowRequest,
+  SocialAccountGateway,
 } from '../src/core/types';
 
 const location = { label: 'London, United Kingdom', latitude: 51.5072, longitude: -0.1276 };
@@ -35,6 +37,33 @@ class ControlledPrayerTimeProvider implements PrayerTimeProvider {
       { prayer: 'Maghrib' as const, startsAt: '2026-09-24T17:30:00.000Z', endsAt: '2026-09-24T19:00:00.000Z' },
       { prayer: 'Isha' as const, startsAt: '2026-09-24T19:00:00.000Z', endsAt: '2026-09-24T20:30:00.000Z' },
     ];
+  }
+}
+
+class ControlledSocialAuthenticationGateway implements SocialAccountGateway {
+  private user: AuthenticatedUser | null = null;
+
+  async currentUser(): Promise<AuthenticatedUser | null> {
+    return this.user;
+  }
+
+  async createAccount(): Promise<AuthenticatedUser> {
+    this.user = { userId: 'social-user' };
+    return this.user;
+  }
+
+  async signIn(): Promise<AuthenticatedUser> {
+    this.user = { userId: 'social-user' };
+    return this.user;
+  }
+
+  async signInWithProvider(): Promise<AuthenticatedUser> {
+    this.user = { userId: 'social-user' };
+    return this.user;
+  }
+
+  async signOut(): Promise<void> {
+    this.user = null;
   }
 }
 
@@ -114,6 +143,25 @@ describe('PrayerPal application seam', () => {
     expect(await firstLaunch.application.signIn({ email: 'amina@example.com', password: 'password' })).toMatchObject({
       screen: 'home',
       displayName: 'Amina',
+    });
+  });
+
+  it('exposes social provider sign-in through the application seam', async () => {
+    const authentication = new ControlledSocialAuthenticationGateway();
+    const application = new PrayerPalApplication({
+      clock: new FixedClock(new Date('2026-09-24T10:00:00.000Z')),
+      device: new FixedDeviceContext('UTC'),
+      authentication,
+      profiles: new InMemoryUserProfileStore(),
+      outcomes: new InMemoryPrayerOutcomeStore(),
+      prayerTime: new ControlledPrayerTimeProvider(),
+      notifications: new InMemoryNotificationGateway('undetermined'),
+    });
+
+    expect(await application.signInWithProvider('google')).toEqual({
+      screen: 'onboarding',
+      displayName: '',
+      notificationPermission: 'undetermined',
     });
   });
 

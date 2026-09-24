@@ -14,6 +14,8 @@ import type {
   PrayerOutcome,
   PrayerPalDependencies,
   RecordPrayerOutcomeResult,
+  SocialAccountGateway,
+  SocialAuthProvider,
   TimingConfiguration,
   ActivePrayerLocation,
 } from './types';
@@ -60,6 +62,12 @@ export class PrayerPalApplication {
   async signIn(credentials: AccountCredentials): Promise<AppSnapshot> {
     const account = this.accountGateway();
     await account.signIn(this.validatedCredentials(credentials));
+    return this.start();
+  }
+
+  async signInWithProvider(provider: SocialAuthProvider): Promise<AppSnapshot> {
+    const account = this.socialAccountGateway();
+    await account.signInWithProvider(provider);
     return this.start();
   }
 
@@ -206,6 +214,14 @@ export class PrayerPalApplication {
       throw new Error('Account access is not configured.');
     }
     return authentication as AccountGateway;
+  }
+
+  private socialAccountGateway(): SocialAccountGateway {
+    const authentication = this.dependencies.authentication as Partial<SocialAccountGateway>;
+    if (typeof authentication.signInWithProvider !== 'function') {
+      throw new Error('Social account access is not configured.');
+    }
+    return authentication as SocialAccountGateway;
   }
 
   private validatedCredentials(credentials: AccountCredentials): AccountCredentials {

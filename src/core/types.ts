@@ -77,10 +77,16 @@ export interface AccountCredentials {
   password: string;
 }
 
+export type SocialAuthProvider = 'google' | 'apple';
+
 export interface AccountGateway extends AuthenticationGateway {
   createAccount(credentials: AccountCredentials): Promise<AuthenticatedUser>;
   signIn(credentials: AccountCredentials): Promise<AuthenticatedUser>;
   signOut(): Promise<void>;
+}
+
+export interface SocialAccountGateway extends AccountGateway {
+  signInWithProvider(provider: SocialAuthProvider): Promise<AuthenticatedUser>;
 }
 
 export interface KeyValueStore {
