@@ -1,5 +1,7 @@
 # Keep account onboarding behind replaceable provider boundaries
 
+_Superseded for the Expo runtime by ADR-0022. The local adapters described here remain the deterministic test implementation._
+
 The first account-onboarding vertical slice will expose account creation, sign-in, sign-out, profile persistence, and Prayer Outcome persistence through the existing application ports. The Expo runtime uses platform-secure storage as a temporary local adapter so the mobile journey works across app restarts while the server integrations are not yet present. The application and domain modules do not depend on SecureStore or an authentication SDK.
 
 This local adapter is an implementation bridge, not the product's final account or data architecture. It does not provide cross-device account access, server-side account recovery, or production authentication guarantees. The planned Supabase Auth and Postgres integrations remain the replacement boundary for a production release.

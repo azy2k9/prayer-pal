@@ -67,7 +67,11 @@ function WelcomeScreen({
         : await application.signIn({ email, password });
       onAuthenticated(snapshot);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Unable to access your account.');
+      const message = nextError instanceof Error ? nextError.message : 'Unable to access your account.';
+      if (message.startsWith('Account created.')) {
+        setMode('sign-in');
+      }
+      setError(message);
     }
   }
 
@@ -76,7 +80,7 @@ function WelcomeScreen({
       <BrandMark />
       <Text style={styles.eyebrow}>Private encouragement for every prayer day</Text>
       <Text style={styles.title}>{mode === 'create' ? 'Make space for a steadier prayer day.' : 'Welcome back to PrayerPal.'}</Text>
-      <Text style={styles.body}>Your account keeps your Prayer Outcomes and Active Prayer Location available when you return. Prayer Circle membership is optional.</Text>
+      <Text style={styles.body}>Your account keeps your onboarding profile and Active Prayer Location available when you return. Prayer Circle membership is optional.</Text>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{mode === 'create' ? 'Create your account' : 'Sign in to your account'}</Text>
         <Text style={styles.label}>Email address</Text>
